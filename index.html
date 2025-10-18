@@ -230,9 +230,8 @@
         </div>
 
         <div class="actions">
-          <button type="button" id="saveButton">Save topic JSON</button>
+          <button type="button" id="downloadButton">Download topic JSON</button>
         </div>
-        <p id="saveStatus" class="hint" aria-live="polite"></p>
       </form>
     </section>
   </main>
@@ -269,11 +268,9 @@
     const conceptList = document.getElementById('conceptList');
     const conceptTemplate = document.getElementById('conceptTemplate');
     const addConceptButton = document.getElementById('addConceptButton');
-    const saveButton = document.getElementById('saveButton');
-    const saveStatus = document.getElementById('saveStatus');
+    const downloadButton = document.getElementById('downloadButton');
 
     let topicNames = [];
-    let savedFileHandle = null;
 
     async function loadTopicNames() {
       try {
@@ -320,8 +317,6 @@
       conceptList.innerHTML = '';
       formSection.hidden = true;
       parseStatus.textContent = '';
-      saveStatus.textContent = '';
-      savedFileHandle = null;
     }
 
     function parseHtmlExcerpt() {
@@ -389,8 +384,6 @@
       conceptList.innerHTML = '';
 
       formSection.hidden = false;
-      saveStatus.textContent = '';
-      savedFileHandle = null;
     }
 
     function addConcept(value = '') {
@@ -430,57 +423,26 @@
       };
     }
 
-    function makeDefaultFilename(title) {
-      const safeTitle = title.replace(/[<>:"/\\|?*]+/g, '').trim();
-      const base = safeTitle.length > 0 ? safeTitle : 'topic';
-      return `${base}.json`;
+    function slugify(text) {
+      return text
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '')
+        .trim() || 'topic';
     }
 
-    async function saveJson() {
+    function downloadJson() {
       const data = gatherFormData();
       const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const filename = `${slugify(data.title)}.json`;
 
-      saveStatus.textContent = '';
-
-      if (typeof window.showSaveFilePicker !== 'function') {
-        const blob = new Blob([json], { type: 'application/json' });
-        const fallbackName = makeDefaultFilename(data.title);
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = fallbackName;
-        anchor.click();
-        URL.revokeObjectURL(url);
-        saveStatus.textContent = 'File saved via download (File System Access API not supported).';
-        return;
-      }
-
-      try {
-        if (!savedFileHandle) {
-          savedFileHandle = await window.showSaveFilePicker({
-            suggestedName: makeDefaultFilename(data.title),
-            types: [
-              {
-                description: 'JSON Files',
-                accept: { 'application/json': ['.json'] },
-              },
-            ],
-          });
-        }
-
-        const writable = await savedFileHandle.createWritable();
-        await writable.write(json);
-        await writable.close();
-        saveStatus.textContent = 'Topic saved successfully.';
-      } catch (error) {
-        if (error && error.name === 'AbortError') {
-          saveStatus.textContent = 'Save cancelled.';
-          return;
-        }
-        console.error(error);
-        saveStatus.textContent = 'Failed to save the file. Check the console for details.';
-        savedFileHandle = null;
-      }
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
     }
 
     parseButton.addEventListener('click', parseHtmlExcerpt);
@@ -489,7 +451,7 @@
       resetForm();
     });
     addConceptButton.addEventListener('click', () => addConcept());
-    saveButton.addEventListener('click', saveJson);
+    downloadButton.addEventListener('click', downloadJson);
 
     // Allow adding concepts with keyboard shortcut (Ctrl/Cmd + Enter)
     conceptList.addEventListener('keydown', (event) => {
