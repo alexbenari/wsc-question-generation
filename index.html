@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WSC Topic Material Builder</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.5;
+      --accent: #5b21b6;
+      --accent-light: #ede9fe;
+    }
+
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #f5f3ff 0%, #ffffff 70%);
+      min-height: 100vh;
+      color: #1f2937;
+    }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem 1rem 4rem;
+    }
+
+    h1 {
+      font-size: clamp(1.8rem, 2.5vw, 2.8rem);
+      margin-bottom: 1rem;
+      color: #312e81;
+      text-align: center;
+    }
+
+    p.lead {
+      text-align: center;
+      margin-top: 0;
+      margin-bottom: 2rem;
+      color: #4c1d95;
+    }
+
+    section {
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 1rem;
+      box-shadow: 0 12px 40px rgba(79, 70, 229, 0.15);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+      color: #4338ca;
+    }
+
+    textarea,
+    select,
+    input[type="text"],
+    input[type="url"] {
+      width: 100%;
+      padding: 0.75rem;
+      border-radius: 0.75rem;
+      border: 1px solid #c7d2fe;
+      background: #eef2ff;
+      font-size: 1rem;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    textarea:focus,
+    select:focus,
+    input[type="text"]:focus,
+    input[type="url"]:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-light);
+    }
+
+    textarea {
+      min-height: 140px;
+      resize: vertical;
+    }
+
+    .actions {
+      margin-top: 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 0.75rem 1.5rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      background: var(--accent);
+      color: white;
+      box-shadow: 0 10px 30px rgba(91, 33, 182, 0.25);
+    }
+
+    button.secondary {
+      background: white;
+      color: var(--accent);
+      border: 2px solid var(--accent);
+      box-shadow: none;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    fieldset.link-entry,
+    li.concept-item {
+      border: 1px solid #c7d2fe;
+      border-radius: 1rem;
+      padding: 1rem;
+      margin-top: 1rem;
+      background: #f5f3ff;
+    }
+
+    fieldset.link-entry legend {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: #4c1d95;
+    }
+
+    .inline-controls {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .inline-controls input {
+      flex: 1;
+    }
+
+    ul#conceptList {
+      list-style: none;
+      padding-left: 0;
+      margin: 0;
+    }
+
+    li.concept-item {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    li.concept-item input {
+      flex: 1;
+    }
+
+    li.concept-item button {
+      padding: 0.5rem 0.9rem;
+    }
+
+    .hint {
+      font-size: 0.9rem;
+      color: #6b7280;
+      margin-top: 0.25rem;
+    }
+
+    @media (max-width: 640px) {
+      button {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .inline-controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      li.concept-item {
+        flex-direction: column;
+        align-items: stretch;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>World Scholar's Cup Topic Material Builder</h1>
+    <p class="lead">Paste an HTML excerpt and quickly build a topic JSON file ready for the WSC question generator.</p>
+
+    <section id="input-section">
+      <label for="htmlInput">HTML excerpt</label>
+      <textarea id="htmlInput" placeholder="Paste the HTML for a single topic here..."></textarea>
+      <div class="actions">
+        <button id="parseButton" type="button">Parse excerpt</button>
+        <button id="resetButton" type="button" class="secondary">Reset</button>
+      </div>
+      <p id="parseStatus" class="hint" aria-live="polite"></p>
+    </section>
+
+    <section id="formSection" hidden>
+      <form id="materialForm">
+        <label for="titleSelect">Topic title</label>
+        <select id="titleSelect"></select>
+        <p class="hint">Auto-selected from the pasted excerpt when possible. You can choose a different topic if necessary.</p>
+
+        <label for="materialInput">Material (plain text)</label>
+        <textarea id="materialInput" placeholder="The HTML excerpt converted into plain text"></textarea>
+        <p class="hint">All markup has been removed and line breaks collapsed into a single line.</p>
+
+        <div id="linksSection">
+          <h2>Additional material</h2>
+          <p class="hint">Each link found in the excerpt becomes an entry. Fill in the summary text for each source.</p>
+          <div id="linksContainer"></div>
+        </div>
+
+        <div id="conceptsSection">
+          <h2>Concepts</h2>
+          <p class="hint">Start with an empty list. Add any key concepts you want to capture for this topic.</p>
+          <ul id="conceptList"></ul>
+          <div class="actions">
+            <button type="button" id="addConceptButton" class="secondary">Add concept</button>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="button" id="downloadButton">Download topic JSON</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <template id="linkTemplate">
+    <fieldset class="link-entry">
+      <legend></legend>
+      <label>URL</label>
+      <input type="url" class="link-url" required />
+      <label>Link text</label>
+      <input type="text" class="link-name" />
+      <label>Summary text</label>
+      <textarea class="link-text" placeholder="Add a short summary of the linked material..."></textarea>
+    </fieldset>
+  </template>
+
+  <template id="conceptTemplate">
+    <li class="concept-item">
+      <input type="text" class="concept-input" placeholder="New concept" />
+      <button type="button" class="remove-concept secondary">Remove</button>
+    </li>
+  </template>
+
+  <script>
+    const htmlInput = document.getElementById('htmlInput');
+    const parseButton = document.getElementById('parseButton');
+    const resetButton = document.getElementById('resetButton');
+    const parseStatus = document.getElementById('parseStatus');
+    const formSection = document.getElementById('formSection');
+    const titleSelect = document.getElementById('titleSelect');
+    const materialInput = document.getElementById('materialInput');
+    const linksContainer = document.getElementById('linksContainer');
+    const linkTemplate = document.getElementById('linkTemplate');
+    const conceptList = document.getElementById('conceptList');
+    const conceptTemplate = document.getElementById('conceptTemplate');
+    const addConceptButton = document.getElementById('addConceptButton');
+    const downloadButton = document.getElementById('downloadButton');
+
+    let topicNames = [];
+
+    async function loadTopicNames() {
+      try {
+        const response = await fetch('topic-names.txt');
+        if (!response.ok) {
+          throw new Error(`Unable to load topic names (status ${response.status})`);
+        }
+        const text = await response.text();
+        topicNames = text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0);
+        populateTopicOptions();
+      } catch (error) {
+        console.error(error);
+        parseStatus.textContent = 'Failed to load topic names. Check the console for details.';
+        parseButton.disabled = true;
+      }
+    }
+
+    function populateTopicOptions(selectedTitle = '') {
+      titleSelect.innerHTML = '';
+      for (const name of topicNames) {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        if (name === selectedTitle) {
+          option.selected = true;
+        }
+        titleSelect.appendChild(option);
+      }
+      if (!titleSelect.value && topicNames.length > 0) {
+        titleSelect.value = topicNames[0];
+      }
+    }
+
+    function normalizeWhitespace(text) {
+      return text.replace(/\s+/g, ' ').trim();
+    }
+
+    function resetForm() {
+      materialInput.value = '';
+      linksContainer.innerHTML = '';
+      conceptList.innerHTML = '';
+      formSection.hidden = true;
+      parseStatus.textContent = '';
+    }
+
+    function parseHtmlExcerpt() {
+      const rawHtml = htmlInput.value.trim();
+      if (!rawHtml) {
+        parseStatus.textContent = 'Please paste an HTML excerpt before parsing.';
+        formSection.hidden = true;
+        return;
+      }
+
+      const parserContainer = document.createElement('div');
+      parserContainer.innerHTML = rawHtml;
+
+      // Determine title by matching topic names appearing earliest in the excerpt
+      let chosenTitle = '';
+      if (topicNames.length > 0) {
+        const lowerHtml = rawHtml.toLowerCase();
+        let bestMatchIndex = Number.POSITIVE_INFINITY;
+        for (const name of topicNames) {
+          const index = lowerHtml.indexOf(name.toLowerCase());
+          if (index >= 0 && index < bestMatchIndex) {
+            bestMatchIndex = index;
+            chosenTitle = name;
+          }
+        }
+      }
+      populateTopicOptions(chosenTitle);
+      if (!chosenTitle) {
+        parseStatus.textContent = 'No topic title recognised near the start of the excerpt. Please choose one manually.';
+      } else {
+        parseStatus.textContent = `Detected topic title: "${chosenTitle}".`;
+      }
+
+      // Extract material text
+      const textContent = parserContainer.textContent || '';
+      materialInput.value = normalizeWhitespace(textContent);
+
+      // Extract links and populate entries
+      linksContainer.innerHTML = '';
+      const links = Array.from(parserContainer.querySelectorAll('a[href]'));
+      if (links.length === 0) {
+        const emptyNotice = document.createElement('p');
+        emptyNotice.className = 'hint';
+        emptyNotice.textContent = 'No links found in the excerpt. You can add them manually if needed.';
+        linksContainer.appendChild(emptyNotice);
+      } else {
+        links.forEach((link, index) => {
+          const clone = linkTemplate.content.cloneNode(true);
+          const fieldset = clone.querySelector('fieldset');
+          const legend = fieldset.querySelector('legend');
+          const urlInput = fieldset.querySelector('.link-url');
+          const nameInput = fieldset.querySelector('.link-name');
+          const textArea = fieldset.querySelector('.link-text');
+
+          legend.textContent = `Link ${index + 1}`;
+          urlInput.value = link.getAttribute('href') ?? '';
+          nameInput.value = normalizeWhitespace(link.textContent || '');
+          textArea.value = '';
+
+          linksContainer.appendChild(clone);
+        });
+      }
+
+      // Reset concepts to an empty list
+      conceptList.innerHTML = '';
+
+      formSection.hidden = false;
+    }
+
+    function addConcept(value = '') {
+      const clone = conceptTemplate.content.cloneNode(true);
+      const listItem = clone.querySelector('li');
+      const input = listItem.querySelector('.concept-input');
+      const removeButton = listItem.querySelector('.remove-concept');
+      input.value = value;
+      removeButton.addEventListener('click', () => {
+        listItem.remove();
+      });
+      conceptList.appendChild(listItem);
+      input.focus();
+    }
+
+    function gatherFormData() {
+      const title = titleSelect.value;
+      const material = normalizeWhitespace(materialInput.value);
+
+      const linkEntries = Array.from(linksContainer.querySelectorAll('.link-entry'));
+      const additionalMaterial = linkEntries.map((entry) => {
+        const source = entry.querySelector('.link-url').value.trim();
+        const name = entry.querySelector('.link-name').value.trim();
+        const text = entry.querySelector('.link-text').value.trim();
+        return { source, name, text };
+      });
+
+      const concepts = Array.from(conceptList.querySelectorAll('.concept-input'))
+        .map((input) => input.value.trim())
+        .filter((value) => value.length > 0);
+
+      return {
+        title,
+        material,
+        'additional-material': additionalMaterial,
+        concepts,
+      };
+    }
+
+    function slugify(text) {
+      return text
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '')
+        .trim() || 'topic';
+    }
+
+    function downloadJson() {
+      const data = gatherFormData();
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const filename = `${slugify(data.title)}.json`;
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    }
+
+    parseButton.addEventListener('click', parseHtmlExcerpt);
+    resetButton.addEventListener('click', () => {
+      htmlInput.value = '';
+      resetForm();
+    });
+    addConceptButton.addEventListener('click', () => addConcept());
+    downloadButton.addEventListener('click', downloadJson);
+
+    // Allow adding concepts with keyboard shortcut (Ctrl/Cmd + Enter)
+    conceptList.addEventListener('keydown', (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault();
+        addConcept();
+      }
+    });
+
+    // Load topic names once the page is ready
+    window.addEventListener('DOMContentLoaded', loadTopicNames);
+  </script>
+</body>
+</html>
