@@ -145,6 +145,23 @@
       flex: 1;
     }
 
+    .link-actions {
+      margin-top: 0.75rem;
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .link-actions button {
+      flex: none;
+    }
+
+    .link-status {
+      font-size: 0.85rem;
+      color: #4338ca;
+    }
+
     ul#conceptList {
       list-style: none;
       padding-left: 0;
@@ -230,8 +247,9 @@
         </div>
 
         <div class="actions">
-          <button type="button" id="downloadButton">Download topic JSON</button>
+          <button type="button" id="saveButton">Save topic JSON</button>
         </div>
+        <p id="saveStatus" class="hint" aria-live="polite"></p>
       </form>
     </section>
   </main>
@@ -245,6 +263,10 @@
       <input type="text" class="link-name" />
       <label>Summary text</label>
       <textarea class="link-text" placeholder="Add a short summary of the linked material..."></textarea>
+      <div class="link-actions">
+        <button type="button" class="summary-button secondary">Generate summary</button>
+        <span class="link-status" aria-live="polite"></span>
+      </div>
     </fieldset>
   </template>
 
@@ -268,9 +290,42 @@
     const conceptList = document.getElementById('conceptList');
     const conceptTemplate = document.getElementById('conceptTemplate');
     const addConceptButton = document.getElementById('addConceptButton');
-    const downloadButton = document.getElementById('downloadButton');
+    const saveButton = document.getElementById('saveButton');
+    const saveStatus = document.getElementById('saveStatus');
+
+    const OPENAI_API_KEY = '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';
+    const SUMMARY_MODEL = 'gpt-4o-mini';
+    const MAX_ARTICLE_CHARS = 20000;
+    const SUMMARY_PROMPT = `Length & Depth
+
+Each summary should be thorough but concise, no longer than four paragraphs.
+
+It should capture all essential points — background, main arguments, evidence, and implications.
+
+Tone & Style
+
+Use clear, neutral, academic prose.
+
+Avoid filler phrases (e.g., “the article recounts,” “according to…”).
+
+Write in plain text — no links or citations in the final summary.
+
+Focus & Structure
+
+Prioritize the central ideas and arguments of the article.
+
+Cover key context (who, what, where, when, why, and how).
+
+Integrate supporting details naturally, without excessive enumeration or repetition.
+
+Scope of Work
+
+For each URL provided, I should read and summarize that article only — not synthesize multiple pieces unless asked.
+
+The goal is to create a reliable, standalone summary.`;
 
     let topicNames = [];
+    let savedFileHandle = null;
 
     async function loadTopicNames() {
       try {
@@ -311,12 +366,167 @@
       return text.replace(/\s+/g, ' ').trim();
     }
 
+    function extractReadableText(content) {
+      if (!content) {
+        return '';
+      }
+      const container = document.createElement('div');
+      container.innerHTML = content;
+      const text = container.textContent || container.innerText || '';
+      return text.replace(/\s+/g, ' ').trim();
+    }
+
+    async function fetchArticleContent(url) {
+      const attempts = [];
+      const seen = new Set();
+      const addAttempt = (candidate) => {
+        if (candidate && !seen.has(candidate)) {
+          seen.add(candidate);
+          attempts.push(candidate);
+        }
+      };
+
+      addAttempt(url);
+      try {
+        const parsed = new URL(url);
+        const stripped = `${parsed.host}${parsed.pathname}${parsed.search}`;
+        addAttempt(`https://r.jina.ai/http://${stripped}`);
+        addAttempt(`https://r.jina.ai/https://${stripped}`);
+      } catch (error) {
+        console.warn('Unable to parse URL for proxy fetch attempts.', error);
+        addAttempt(`https://r.jina.ai/http://${url.replace(/^https?:\/\//, '')}`);
+      }
+
+      for (const attemptUrl of attempts) {
+        try {
+          const response = await fetch(attemptUrl);
+          if (!response.ok) {
+            continue;
+          }
+          const contentType = response.headers.get('content-type') || '';
+          if (
+            contentType.includes('text') ||
+            contentType.includes('html') ||
+            contentType.includes('json') ||
+            contentType.includes('xml') ||
+            contentType === ''
+          ) {
+            const text = await response.text();
+            if (text.trim()) {
+              return text;
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to fetch article content from', attemptUrl, error);
+        }
+      }
+
+      return '';
+    }
+
+    async function requestSummaryFromOpenAI(url, articleText) {
+      if (!OPENAI_API_KEY) {
+        throw new Error('OpenAI API key is not configured.');
+      }
+
+      const payload = {
+        model: SUMMARY_MODEL,
+        temperature: 0.2,
+        max_tokens: 800,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a careful researcher who writes precise, neutral summaries of source material.',
+          },
+          {
+            role: 'user',
+            content: `${SUMMARY_PROMPT}\n\nURL: ${url}\n\nArticle content:\n${articleText}`,
+          },
+        ],
+      };
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let message = `OpenAI request failed with status ${response.status}.`;
+        try {
+          const errorPayload = await response.json();
+          if (errorPayload?.error?.message) {
+            message = errorPayload.error.message;
+          }
+        } catch (parseError) {
+          console.warn('Unable to parse OpenAI error payload.', parseError);
+        }
+        throw new Error(message);
+      }
+
+      const data = await response.json();
+      const summary = data?.choices?.[0]?.message?.content?.trim();
+      if (!summary) {
+        throw new Error('The OpenAI response did not include a summary.');
+      }
+      return summary;
+    }
+
+    async function generateLinkSummary(fieldset) {
+      const urlInput = fieldset.querySelector('.link-url');
+      const textArea = fieldset.querySelector('.link-text');
+      const status = fieldset.querySelector('.link-status');
+      const button = fieldset.querySelector('.summary-button');
+
+      if (!urlInput || !textArea || !status || !button) {
+        return;
+      }
+
+      const url = urlInput.value.trim();
+      if (!url) {
+        status.textContent = 'Enter a URL before generating a summary.';
+        urlInput.focus();
+        return;
+      }
+
+      button.disabled = true;
+      status.textContent = 'Fetching article content…';
+
+      try {
+        const rawContent = await fetchArticleContent(url);
+        if (!rawContent) {
+          throw new Error('Unable to retrieve the article content automatically.');
+        }
+
+        const readableText = extractReadableText(rawContent);
+        if (!readableText) {
+          throw new Error('The fetched article did not include readable text.');
+        }
+
+        const truncated = readableText.slice(0, MAX_ARTICLE_CHARS);
+        status.textContent = 'Generating summary…';
+        const summary = await requestSummaryFromOpenAI(url, truncated);
+        textArea.value = summary;
+        status.textContent = 'Summary updated.';
+      } catch (error) {
+        console.error(error);
+        status.textContent = error?.message || 'Failed to generate summary.';
+      } finally {
+        button.disabled = false;
+      }
+    }
+
     function resetForm() {
       materialInput.value = '';
       linksContainer.innerHTML = '';
       conceptList.innerHTML = '';
       formSection.hidden = true;
       parseStatus.textContent = '';
+      saveStatus.textContent = '';
+      savedFileHandle = null;
     }
 
     function parseHtmlExcerpt() {
@@ -370,11 +580,19 @@
           const urlInput = fieldset.querySelector('.link-url');
           const nameInput = fieldset.querySelector('.link-name');
           const textArea = fieldset.querySelector('.link-text');
+          const summaryButton = fieldset.querySelector('.summary-button');
+          const status = fieldset.querySelector('.link-status');
 
           legend.textContent = `Link ${index + 1}`;
           urlInput.value = link.getAttribute('href') ?? '';
           nameInput.value = normalizeWhitespace(link.textContent || '');
           textArea.value = '';
+          if (status) {
+            status.textContent = '';
+          }
+          if (summaryButton) {
+            summaryButton.addEventListener('click', () => generateLinkSummary(fieldset));
+          }
 
           linksContainer.appendChild(clone);
         });
@@ -384,6 +602,8 @@
       conceptList.innerHTML = '';
 
       formSection.hidden = false;
+      saveStatus.textContent = '';
+      savedFileHandle = null;
     }
 
     function addConcept(value = '') {
@@ -423,26 +643,57 @@
       };
     }
 
-    function slugify(text) {
-      return text
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)+/g, '')
-        .trim() || 'topic';
+    function makeDefaultFilename(title) {
+      const safeTitle = title.replace(/[<>:"/\\|?*]+/g, '').trim();
+      const base = safeTitle.length > 0 ? safeTitle : 'topic';
+      return `${base}.json`;
     }
 
-    function downloadJson() {
+    async function saveJson() {
       const data = gatherFormData();
       const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const filename = `${slugify(data.title)}.json`;
 
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = filename;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      saveStatus.textContent = '';
+
+      if (typeof window.showSaveFilePicker !== 'function') {
+        const blob = new Blob([json], { type: 'application/json' });
+        const fallbackName = makeDefaultFilename(data.title);
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = fallbackName;
+        anchor.click();
+        URL.revokeObjectURL(url);
+        saveStatus.textContent = 'File saved via download (File System Access API not supported).';
+        return;
+      }
+
+      try {
+        if (!savedFileHandle) {
+          savedFileHandle = await window.showSaveFilePicker({
+            suggestedName: makeDefaultFilename(data.title),
+            types: [
+              {
+                description: 'JSON Files',
+                accept: { 'application/json': ['.json'] },
+              },
+            ],
+          });
+        }
+
+        const writable = await savedFileHandle.createWritable();
+        await writable.write(json);
+        await writable.close();
+        saveStatus.textContent = 'Topic saved successfully.';
+      } catch (error) {
+        if (error && error.name === 'AbortError') {
+          saveStatus.textContent = 'Save cancelled.';
+          return;
+        }
+        console.error(error);
+        saveStatus.textContent = 'Failed to save the file. Check the console for details.';
+        savedFileHandle = null;
+      }
     }
 
     parseButton.addEventListener('click', parseHtmlExcerpt);
@@ -451,7 +702,7 @@
       resetForm();
     });
     addConceptButton.addEventListener('click', () => addConcept());
-    downloadButton.addEventListener('click', downloadJson);
+    saveButton.addEventListener('click', saveJson);
 
     // Allow adding concepts with keyboard shortcut (Ctrl/Cmd + Enter)
     conceptList.addEventListener('keydown', (event) => {
