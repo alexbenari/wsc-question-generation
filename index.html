@@ -231,15 +231,6 @@
         <textarea id="materialInput" placeholder="The HTML excerpt converted into plain text"></textarea>
         <p class="hint">All markup has been removed and line breaks collapsed into a single line.</p>
 
-        <label for="apiKeyInput">OpenAI API key</label>
-        <input
-          type="password"
-          id="apiKeyInput"
-          placeholder="Enter your OpenAI API key"
-          autocomplete="off"
-        />
-        <p class="hint">The key is used only in your browser session to generate link summaries.</p>
-
         <div id="linksSection">
           <h2>Additional material</h2>
           <p class="hint">Each link found in the excerpt becomes an entry. Fill in the summary text for each source.</p>
@@ -294,7 +285,6 @@
     const formSection = document.getElementById('formSection');
     const titleSelect = document.getElementById('titleSelect');
     const materialInput = document.getElementById('materialInput');
-    const apiKeyInput = document.getElementById('apiKeyInput');
     const linksContainer = document.getElementById('linksContainer');
     const linkTemplate = document.getElementById('linkTemplate');
     const conceptList = document.getElementById('conceptList');
@@ -303,6 +293,7 @@
     const saveButton = document.getElementById('saveButton');
     const saveStatus = document.getElementById('saveStatus');
 
+    const OPENAI_API_KEY = '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';
     const SUMMARY_MODEL = 'gpt-4o-mini';
     const MAX_ARTICLE_CHARS = 20000;
     const SUMMARY_PROMPT = `Length & Depth
@@ -385,15 +376,6 @@ The goal is to create a reliable, standalone summary.`;
       return text.replace(/\s+/g, ' ').trim();
     }
 
-    function updateSummaryButtonStates() {
-      const hasKey = Boolean(apiKeyInput?.value?.trim());
-      const buttons = linksContainer.querySelectorAll('.summary-button');
-      buttons.forEach((button) => {
-        const busy = button.dataset.busy === 'true';
-        button.disabled = busy || !hasKey;
-      });
-    }
-
     async function fetchArticleContent(url) {
       const attempts = [];
       const seen = new Set();
@@ -443,9 +425,8 @@ The goal is to create a reliable, standalone summary.`;
     }
 
     async function requestSummaryFromOpenAI(url, articleText) {
-      const apiKey = apiKeyInput?.value?.trim();
-      if (!apiKey) {
-        throw new Error('Enter an OpenAI API key before requesting a summary.');
+      if (!OPENAI_API_KEY) {
+        throw new Error('OpenAI API key is not configured.');
       }
 
       const payload = {
@@ -468,7 +449,7 @@ The goal is to create a reliable, standalone summary.`;
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
         },
         body: JSON.stringify(payload),
       });
@@ -511,8 +492,7 @@ The goal is to create a reliable, standalone summary.`;
         return;
       }
 
-      button.dataset.busy = 'true';
-      updateSummaryButtonStates();
+      button.disabled = true;
       status.textContent = 'Fetching article content…';
 
       try {
@@ -535,8 +515,7 @@ The goal is to create a reliable, standalone summary.`;
         console.error(error);
         status.textContent = error?.message || 'Failed to generate summary.';
       } finally {
-        button.dataset.busy = 'false';
-        updateSummaryButtonStates();
+        button.disabled = false;
       }
     }
 
@@ -548,7 +527,6 @@ The goal is to create a reliable, standalone summary.`;
       parseStatus.textContent = '';
       saveStatus.textContent = '';
       savedFileHandle = null;
-      updateSummaryButtonStates();
     }
 
     function parseHtmlExcerpt() {
@@ -613,7 +591,6 @@ The goal is to create a reliable, standalone summary.`;
             status.textContent = '';
           }
           if (summaryButton) {
-            summaryButton.dataset.busy = 'false';
             summaryButton.addEventListener('click', () => generateLinkSummary(fieldset));
           }
 
@@ -627,7 +604,6 @@ The goal is to create a reliable, standalone summary.`;
       formSection.hidden = false;
       saveStatus.textContent = '';
       savedFileHandle = null;
-      updateSummaryButtonStates();
     }
 
     function addConcept(value = '') {
@@ -727,7 +703,6 @@ The goal is to create a reliable, standalone summary.`;
     });
     addConceptButton.addEventListener('click', () => addConcept());
     saveButton.addEventListener('click', saveJson);
-    apiKeyInput?.addEventListener('input', updateSummaryButtonStates);
 
     // Allow adding concepts with keyboard shortcut (Ctrl/Cmd + Enter)
     conceptList.addEventListener('keydown', (event) => {
@@ -739,7 +714,6 @@ The goal is to create a reliable, standalone summary.`;
 
     // Load topic names once the page is ready
     window.addEventListener('DOMContentLoaded', loadTopicNames);
-    updateSummaryButtonStates();
   </script>
 </body>
 </html>
