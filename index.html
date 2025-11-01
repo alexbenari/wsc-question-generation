@@ -303,6 +303,7 @@
     const saveButton = document.getElementById('saveButton');
     const saveStatus = document.getElementById('saveStatus');
 
+    const OPENAI_API_KEY = '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';
     const SUMMARY_MODEL = 'gpt-4o-mini';
     const MAX_ARTICLE_CHARS = 20000;
     const SUMMARY_PROMPT = `Length & Depth
@@ -446,6 +447,8 @@ The goal is to create a reliable, standalone summary.`;
       const apiKey = apiKeyInput?.value?.trim();
       if (!apiKey) {
         throw new Error('Enter an OpenAI API key before requesting a summary.');
+      if (!OPENAI_API_KEY) {
+        throw new Error('OpenAI API key is not configured.');
       }
 
       const payload = {
@@ -469,6 +472,7 @@ The goal is to create a reliable, standalone summary.`;
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
         },
         body: JSON.stringify(payload),
       });
@@ -513,6 +517,7 @@ The goal is to create a reliable, standalone summary.`;
 
       button.dataset.busy = 'true';
       updateSummaryButtonStates();
+      button.disabled = true;
       status.textContent = 'Fetching article content…';
 
       try {
@@ -537,6 +542,7 @@ The goal is to create a reliable, standalone summary.`;
       } finally {
         button.dataset.busy = 'false';
         updateSummaryButtonStates();
+        button.disabled = false;
       }
     }
 
@@ -652,6 +658,9 @@ The goal is to create a reliable, standalone summary.`;
     }
 
     function createConceptItem(value = '', { focus = true } = {}) {
+    }
+
+    function addConcept(value = '') {
       const clone = conceptTemplate.content.cloneNode(true);
       const listItem = clone.querySelector('li');
       const input = listItem.querySelector('.concept-input');
@@ -720,6 +729,8 @@ The goal is to create a reliable, standalone summary.`;
       }
 
       return createdItems.length > 0;
+      conceptList.appendChild(listItem);
+      input.focus();
     }
 
     function gatherFormData() {
