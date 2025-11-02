@@ -188,6 +188,14 @@
       margin-top: 0.25rem;
     }
 
+    .hint code {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      background: #e0e7ff;
+      color: #312e81;
+      padding: 0.1rem 0.35rem;
+      border-radius: 0.35rem;
+    }
+
     @media (max-width: 640px) {
       button {
         width: 100%;
@@ -472,6 +480,23 @@ The goal is to create a reliable, standalone summary.`;
       return '';
     }
 
+    function buildOpenAIHeaders(apiKey) {
+      return {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      };
+    }
+
+    function formatOpenAIError(status, payload) {
+      if (payload?.error?.message) {
+        if (status === 401) {
+          return `${payload.error.message} (verify that the key is correct and active).`;
+        }
+        return payload.error.message;
+      }
+      return `OpenAI request failed with status ${status}.`;
+    }
+
     async function requestSummaryFromOpenAI(url, articleText) {
       const apiKey = apiKeyInput?.value?.trim();
       if (!apiKey) {
@@ -496,6 +521,7 @@ The goal is to create a reliable, standalone summary.`;
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
+        headers: buildOpenAIHeaders(apiKey),
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
@@ -507,6 +533,7 @@ The goal is to create a reliable, standalone summary.`;
         let message = `OpenAI request failed with status ${response.status}.`;
         try {
           const errorPayload = await response.json();
+          message = formatOpenAIError(response.status, errorPayload);
           if (errorPayload?.error?.message) {
             message = errorPayload.error.message;
           }
